@@ -2,7 +2,8 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 import os
-import datetime
+
+bot.run(os.getenv("DISCORD_TOKEN"))
 
 kullanici_bekleme_sureleri = {}
 
