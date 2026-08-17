@@ -3,7 +3,6 @@ from discord.ext import commands
 from discord import app_commands
 import os
 
-bot.run(os.getenv("DISCORD_TOKEN"))
 
 kullanici_bekleme_sureleri = {}
 
