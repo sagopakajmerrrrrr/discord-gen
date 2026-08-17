@@ -3,6 +3,7 @@ from discord.ext import commands
 from discord import app_commands
 import os
 
+bot.run(os.getenv("DISCORD_TOKEN"))
 
 kullanici_bekleme_sureleri = {}
 
@@ -300,4 +301,4 @@ async def gen(interaction: discord.Interaction, kategori: app_commands.Choice[st
         log_embed.set_footer(text="Audit Log System")
         await log_kanali.send(embed=log_embed)
 
-bot.run("MTUzNzk2ODE3MDE4MTE5NzgyNA.GeLCBH.1VNwhaZSyCJipR-seikl_H4aNoXqyyeoKbnfTE")
+bot.run("token")
