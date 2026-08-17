@@ -3,6 +3,29 @@ from discord.ext import commands
 from discord import app_commands
 import os
 import datetime
+from threading import Thread
+from flask import Flask
+
+# Web sunucusu oluşturuyoruz
+app = Flask('')
+
+
+@app.route('/')
+def home():
+  return 'Bot aktif!'
+
+
+def run():
+  app.run(host='0.0.0.0', port=8080)
+
+
+def keep_alive():
+  t = Thread(target=run)
+  t.start()
+
+
+# Kodun en başında veya botu çalıştırmadan hemen önce bunu çağırıyoruz
+keep_alive()
 
 kullanici_bekleme_sureleri = {}
 
