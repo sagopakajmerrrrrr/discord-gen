@@ -3,31 +3,49 @@ from discord.ext import commands
 from discord import app_commands
 import os
 import datetime
-from threading import Thread
-from flask import Flask
-
-# Web sunucusu oluşturuyoruz
-app = Flask('')
-
-
-@app.route('/')
-def home():
-  return 'Bot aktif!'
-
-
-def run():
-  app.run(host='0.0.0.0', port=8080)
-
-
-def keep_alive():
-  t = Thread(target=run)
-  t.start()
-
-
-# Kodun en başında veya botu çalıştırmadan hemen önce bunu çağırıyoruz
-keep_alive()
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
 
 kullanici_bekleme_sureleri = {}
+
+# ==========================================
+# GOOGLE SHEETS BAĞLANTI AYARLARI
+# ==========================================
+scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
+client = gspread.authorize(creds)
+
+# Google Sheets Tablo Adı
+SHEET_NAME = "zalorant stock"
+
+def stok_cek_ve_sil(kategori_adi):
+    try:
+        sheet = client.open(SHEET_NAME).worksheet(kategori_adi)
+        satirlar = sheet.col_values(1) # A sütunundaki tüm hesapları çeker
+        
+        # Boş olmayan satırları filtrele
+        satirlar = [s.strip() for s in satirlar if s and s.strip()]
+        
+        if not satirlar:
+            return None, 0
+            
+        verilen_hesap = satirlar[0] # İlk hesabı seç
+        
+        # Seçilen hesabı Google Sheets tablosundan tamamen sil (A1 hücresini temizler/siler)
+        sheet.delete_rows(1)
+        
+        kalan_stok = len(satirlar) - 1
+        return verilen_hesap, kalan_stok
+    except Exception as e:
+        print(f"Google Sheets Hatası ({kategori_adi}): {e}")
+        return None, 0
+
+def stok_geri_yukle(kategori_adi, hesap):
+    try:
+        sheet = client.open(SHEET_NAME).worksheet(kategori_adi)
+        sheet.append_row([hesap])
+    except Exception as e:
+        print(f"Stok iade hatası: {e}")
 
 # ==========================================
 # GÖRSEL TEMA VE RENK PALETİ
@@ -49,7 +67,6 @@ class GenBot(commands.Bot):
         super().__init__(command_prefix="!", intents=intents)
 
     async def setup_hook(self):
-        # await self.tree.sync()
         print(f"⚡ [GEN BOT] {self.user} olarak giriş yapıldı!")
 
     async def on_ready(self):
@@ -61,6 +78,7 @@ class GenBot(commands.Bot):
                 print(f"⚠️ [{guild.name}] sunucusunda davetleri okuma iznim yok!")
 
 bot = GenBot()
+
 @bot.event
 async def on_invite_create(invite):
     if invite.guild.id in bot.invite_cache:
@@ -169,7 +187,7 @@ async def istatistik_command(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed)
 
 # ==========================================
-# 3. GELİŞMİŞ GEN SİSTEMİ
+# 3. GELİŞMİŞ GEN SİSTEMİ (GOOGLE SHEETS)
 # ==========================================
 @bot.tree.command(name="gen", description="Yetkinize uygun kategoriden hesap alın")
 @app_commands.describe(kategori="Hangi kategoriden veri almak istiyorsunuz?")
@@ -238,16 +256,10 @@ async def gen(interaction: discord.Interaction, kategori: app_commands.Choice[st
         await interaction.response.send_message(embed=error_embed, ephemeral=True)
         return
 
-    dosya_yolu = f"{kategori.value}.txt"
-    if not os.path.exists(dosya_yolu):
-        with open(dosya_yolu, "w", encoding="utf-8") as f:
-            pass
-            
-    with open(dosya_yolu, "r", encoding="utf-8") as f:
-        satirlar = f.readlines()
-        
-    satirlar = [satir.strip() for satir in satirlar if satir.strip()]
-    if not satirlar:
+    # Google Sheets'ten veriyi çek ve listeden sil
+    verilen_hesap, kalan_stok = stok_cek_ve_sil(kategori.value)
+    
+    if not verilen_hesap:
         stok_embed = discord.Embed(
             title="📦 Stok Tükenmiş",
             description=f"Üzgünüz, **{kategori.name}** kategorisinde şu anda kullanılabilir stok bulunmuyor.",
@@ -255,13 +267,6 @@ async def gen(interaction: discord.Interaction, kategori: app_commands.Choice[st
         )
         await interaction.response.send_message(embed=stok_embed, ephemeral=True)
         return
-        
-    verilen_hesap = satirlar.pop(0)
-    kalan_stok = len(satirlar)
-    
-    with open(dosya_yolu, "w", encoding="utf-8") as f:
-        for satir in satirlar:
-            f.write(satir + "\n")
             
     # DM İÇİN ÖZEL TESLİMAT EMBED'İ
     dm_embed = discord.Embed(
@@ -278,8 +283,8 @@ async def gen(interaction: discord.Interaction, kategori: app_commands.Choice[st
     try:
         await interaction.user.send(embed=dm_embed)
     except discord.Forbidden:
-        with open(dosya_yolu, "a", encoding="utf-8") as f:
-            f.write(verilen_hesap + "\n")
+        # Eğer kullanıcının DM'si kapalıysa hesabı tekrar Google Sheets'e geri ekle
+        stok_geri_yukle(kategori.value, verilen_hesap)
             
         dm_error = discord.Embed(
             title="❌ DM Gönderilemedi",
@@ -323,5 +328,4 @@ async def gen(interaction: discord.Interaction, kategori: app_commands.Choice[st
         log_embed.set_footer(text="Audit Log System")
         await log_kanali.send(embed=log_embed)
 
-bot.run(os.getenv("DISCORD_TOKEN"))
-
+bot.run("MTUzNzk2ODE3MDE4MTE5NzgyNA.GeLCBH.1VNwhaZSyCJipR-seikl_H4aNoXqyyeoKbnfTE")
